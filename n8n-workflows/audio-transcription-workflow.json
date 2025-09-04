@@ -1,0 +1,408 @@
+{
+  "name": "Audio Transcription with Chunking - Meeting Minutes Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "audio-transcription",
+        "responseMode": "lastNode",
+        "options": {
+          "binaryData": true,
+          "rawBody": true
+        }
+      },
+      "id": "webhook_1",
+      "name": "Webhook - 接收錄音檔",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "audio-transcription"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 獲取上傳的音訊檔案\nconst items = $input.all();\nconst binaryData = items[0].binary?.data || items[0].binary?.audio;\n\nif (!binaryData) {\n  throw new Error('未找到音訊檔案');\n}\n\n// 檢查檔案大小\nconst base64Data = binaryData.data;\nconst fileSizeInBytes = (base64Data.length * 3) / 4;\nconst fileSizeInMB = fileSizeInBytes / (1024 * 1024);\n\nconsole.log(`檔案大小: ${fileSizeInMB.toFixed(2)} MB`);\n\n// 如果檔案小於 24MB，直接處理\nif (fileSizeInMB < 24) {\n  return [{\n    json: {\n      needSplit: false,\n      fileSize: fileSizeInMB,\n      originalFileName: binaryData.fileName || 'audio.m4a',\n      mimeType: binaryData.mimeType || 'audio/m4a'\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n}\n\n// 如果檔案大於 24MB，需要分割\n// 計算需要分割成幾個片段（每個片段最大 20MB）\nconst chunkSizeInMB = 20;\nconst numberOfChunks = Math.ceil(fileSizeInMB / chunkSizeInMB);\n\nreturn [{\n  json: {\n    needSplit: true,\n    fileSize: fileSizeInMB,\n    numberOfChunks: numberOfChunks,\n    chunkSize: chunkSizeInMB,\n    originalFileName: binaryData.fileName || 'audio.m4a',\n    mimeType: binaryData.mimeType || 'audio/m4a'\n  },\n  binary: {\n    data: binaryData\n  }\n}];"
+      },
+      "id": "check_file_size",
+      "name": "檢查檔案大小",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"needSplit\"]}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if_need_split",
+      "name": "是否需要分割",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "zh"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            },
+            {
+              "name": "temperature",
+              "value": "0"
+            }
+          ]
+        },
+        "sendBinaryData": true,
+        "binaryPropertyName": "data",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "direct_transcribe",
+      "name": "直接轉錄 (< 24MB)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{YOUR_CREDENTIAL_ID}}",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 獲取音訊資料\nconst items = $input.all();\nconst audioData = items[0].binary.data;\nconst numberOfChunks = items[0].json.numberOfChunks;\nconst originalFileName = items[0].json.originalFileName;\nconst mimeType = items[0].json.mimeType;\n\n// Base64 資料\nconst base64Data = audioData.data;\n\n// 將 base64 轉換為 Buffer\nconst buffer = Buffer.from(base64Data, 'base64');\n\n// 計算每個片段的大小（位元組）\nconst totalSize = buffer.length;\nconst chunkSize = Math.ceil(totalSize / numberOfChunks);\n\nconsole.log(`總大小: ${totalSize} bytes`);\nconsole.log(`分割成 ${numberOfChunks} 個片段`);\nconsole.log(`每個片段大小約: ${chunkSize} bytes`);\n\n// 分割音訊\nconst chunks = [];\nfor (let i = 0; i < numberOfChunks; i++) {\n  const start = i * chunkSize;\n  const end = Math.min(start + chunkSize, totalSize);\n  const chunkBuffer = buffer.slice(start, end);\n  \n  // 轉換回 base64\n  const chunkBase64 = chunkBuffer.toString('base64');\n  \n  chunks.push({\n    json: {\n      chunkIndex: i + 1,\n      totalChunks: numberOfChunks,\n      chunkSize: chunkBuffer.length,\n      originalFileName: originalFileName,\n      chunkFileName: `chunk_${i + 1}_${originalFileName}`\n    },\n    binary: {\n      data: {\n        data: chunkBase64,\n        mimeType: mimeType,\n        fileName: `chunk_${i + 1}_${originalFileName}`\n      }\n    }\n  });\n}\n\nreturn chunks;"
+      },
+      "id": "split_audio",
+      "name": "分割音訊檔案",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop_transcribe",
+      "name": "循環轉錄每個片段",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "zh"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            },
+            {
+              "name": "temperature",
+              "value": "0"
+            },
+            {
+              "name": "prompt",
+              "value": "={{`這是第 ${$json.chunkIndex} 部分，共 ${$json.totalChunks} 部分的音訊。請準確轉錄。`}}"
+            }
+          ]
+        },
+        "sendBinaryData": true,
+        "binaryPropertyName": "data",
+        "options": {
+          "timeout": 120000
+        },
+        "continueOnFail": true
+      },
+      "id": "transcribe_chunk",
+      "name": "轉錄音訊片段",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1300, 400],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{YOUR_CREDENTIAL_ID}}",
+          "name": "OpenAI API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "wait_between_chunks",
+      "name": "等待 (避免速率限制)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1500, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 獲取所有轉錄結果\nconst items = $input.all();\n\n// 檢查是否為分割處理\nconst isSplit = items.length > 1 || (items[0]?.json?.chunkIndex !== undefined);\n\nlet fullTranscription = '';\n\nif (isSplit) {\n  // 合併所有片段的轉錄文字\n  const transcriptions = [];\n  \n  for (const item of items) {\n    const text = item.json?.text || '';\n    if (text) {\n      transcriptions.push(text);\n    }\n  }\n  \n  // 合併文字，加入空格以確保詞語不會黏在一起\n  fullTranscription = transcriptions.join(' ');\n  console.log(`合併了 ${transcriptions.length} 個片段的轉錄結果`);\n} else {\n  // 單一檔案的轉錄結果\n  fullTranscription = items[0]?.json?.text || '';\n}\n\n// 準備時間戳記\nconst timestamp = new Date().toISOString();\nconst dateStr = new Date().toLocaleDateString('zh-TW');\nconst timeStr = new Date().toLocaleTimeString('zh-TW');\n\n// 清理和格式化文字\nfullTranscription = fullTranscription\n  .replace(/\\s+/g, ' ')  // 移除多餘空格\n  .trim();\n\nreturn [{\n  json: {\n    originalTranscription: fullTranscription,\n    timestamp: timestamp,\n    date: dateStr,\n    time: timeStr,\n    wordCount: fullTranscription.length,\n    status: 'transcribed',\n    wasSplit: isSplit,\n    numberOfChunks: isSplit ? items.length : 1\n  }\n}];"
+      },
+      "id": "merge_transcriptions",
+      "name": "合併轉錄結果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 300]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "你是一位專業的會議記錄整理專家。請將提供的錄音轉錄文字整理成結構化的會議記錄，包括：\n\n1. 會議摘要（3-5句話總結）\n2. 主要討論議題（條列式）\n3. 重要決議事項\n4. 待辦事項與負責人\n5. 後續追蹤事項\n\n請確保內容清晰、準確、專業。如果內容中有不清楚的地方，請標註[待確認]。\n\n注意：如果文字看起來是從多個片段合併的，請嘗試理解完整的上下文並產生連貫的會議記錄。"
+            },
+            {
+              "role": "user",
+              "content": "={{ '請將以下錄音轉錄內容整理成完整的會議記錄：\\n\\n' + $json.originalTranscription }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 2000
+        }
+      },
+      "id": "openai_process",
+      "name": "OpenAI - 生成會議記錄",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
+      "position": [1900, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "{{YOUR_CREDENTIAL_ID}}",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 獲取OpenAI生成的內容\nconst aiResponse = $input.all()[0].json;\nconst meetingMinutes = aiResponse.message?.content || aiResponse.choices?.[0]?.message?.content || aiResponse.text || '';\n\n// 獲取原始資料\nconst originalData = $node[\"合併轉錄結果\"].json;\n\n// 建立會議記錄標頭\nconst header = `會議記錄\n${'='.repeat(50)}\n日期：${originalData.date}\n時間：${originalData.time}\n${originalData.wasSplit ? `\\n備註：音訊檔案較大，已分割成 ${originalData.numberOfChunks} 個片段處理` : ''}\n${'='.repeat(50)}\\n\\n`;\n\n// 組合完整會議記錄\nconst fullMinutes = header + meetingMinutes;\n\n// 準備檔案內容\nconst originalContent = Buffer.from(originalData.originalTranscription, 'utf-8').toString('base64');\nconst minutesContent = Buffer.from(fullMinutes, 'utf-8').toString('base64');\n\nreturn [{\n  json: {\n    ...originalData,\n    meetingMinutes: meetingMinutes,\n    fullMinutes: fullMinutes,\n    processingInfo: {\n      wasSplit: originalData.wasSplit,\n      numberOfChunks: originalData.numberOfChunks,\n      totalWords: originalData.wordCount\n    }\n  },\n  binary: {\n    originalFile: {\n      data: originalContent,\n      mimeType: 'text/plain',\n      fileName: `transcription_original_${originalData.timestamp.replace(/[:.]/g, '-')}.txt`\n    },\n    minutesFile: {\n      data: minutesContent,\n      mimeType: 'text/plain',\n      fileName: `meeting_minutes_${originalData.timestamp.replace(/[:.]/g, '-')}.txt`\n    }\n  }\n}];"
+      },
+      "id": "format_output",
+      "name": "格式化輸出",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: $json.wasSplit ? `大檔案處理完成 (分割成 ${$json.numberOfChunks} 個片段)` : '錄音檔處理完成',\n  data: {\n    timestamp: $json.timestamp,\n    processingInfo: $json.processingInfo,\n    originalTranscription: $json.originalTranscription.substring(0, 200) + '...',\n    meetingMinutesPreview: $json.meetingMinutes.substring(0, 300) + '...',\n    files: {\n      original: 'transcription_original_' + $json.timestamp.replace(/[:.]/g, '-') + '.txt',\n      minutes: 'meeting_minutes_' + $json.timestamp.replace(/[:.]/g, '-') + '.txt'\n    }\n  }\n}) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "response",
+      "name": "回傳結果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2300, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - 接收錄音檔": {
+      "main": [
+        [
+          {
+            "node": "檢查檔案大小",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "檢查檔案大小": {
+      "main": [
+        [
+          {
+            "node": "是否需要分割",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否需要分割": {
+      "main": [
+        [
+          {
+            "node": "直接轉錄 (< 24MB)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "分割音訊檔案",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "直接轉錄 (< 24MB)": {
+      "main": [
+        [
+          {
+            "node": "合併轉錄結果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "分割音訊檔案": {
+      "main": [
+        [
+          {
+            "node": "循環轉錄每個片段",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "循環轉錄每個片段": {
+      "main": [
+        [
+          {
+            "node": "轉錄音訊片段",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "合併轉錄結果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "轉錄音訊片段": {
+      "main": [
+        [
+          {
+            "node": "等待 (避免速率限制)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "等待 (避免速率限制)": {
+      "main": [
+        [
+          {
+            "node": "循環轉錄每個片段",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "合併轉錄結果": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - 生成會議記錄",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - 生成會議記錄": {
+      "main": [
+        [
+          {
+            "node": "格式化輸出",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "格式化輸出": {
+      "main": [
+        [
+          {
+            "node": "回傳結果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2.0.0",
+  "meta": {
+    "instanceId": "audio-transcription-workflow"
+  },
+  "id": "audio-transcription-workflow",
+  "tags": []
+}
