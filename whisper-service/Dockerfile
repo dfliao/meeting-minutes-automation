@@ -23,10 +23,8 @@ RUN git clone https://github.com/ggml-org/whisper.cpp.git src && \
 RUN mkdir -p /models /data
 VOLUME ["/models", "/data"]
 
-# Copy API and entrypoint
+# Copy API server
 COPY server.py /app/server.py
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
