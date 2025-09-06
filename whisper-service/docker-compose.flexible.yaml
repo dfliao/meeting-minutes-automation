@@ -1,0 +1,47 @@
+version: '3.8'
+services:
+  whisper-flexible:
+    container_name: whisper-flexible
+    build: 
+      context: .
+      dockerfile: Dockerfile.fast
+    restart: unless-stopped
+    ports:
+      - "10300:8000"
+    volumes:
+      - /volume3/ai-stack/audio:/data
+      - /volume3/ai-stack/models:/models
+      - ~/.cache/whisper:/root/.cache/whisper  # Whisper 模型快取
+    environment:
+      # 基本設定
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - WHISPER_LANG=${WHISPER_LANG:-zh}
+      - WHISPER_THREADS=${WHISPER_THREADS:-4}
+      
+      # 運算模式設定
+      - COMPUTE_MODE=${COMPUTE_MODE:-local}        # local, remote, auto
+      - REMOTE_WHISPER_HOST=${REMOTE_WHISPER_HOST:-}
+      
+      # Python 環境設定
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+    
+    # 網路設定（如果需要連接遠端服務）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    # 健康檢查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # 資源限制（可選）
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
