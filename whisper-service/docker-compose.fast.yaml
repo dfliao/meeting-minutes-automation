@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  whisper-nonavx:
+    container_name: whisper-nonavx
+    build: 
+      context: .
+      dockerfile: Dockerfile.fast
+    restart: unless-stopped
+    ports:
+      - "10300:8000"
+    volumes:
+      - /volume3/ai-stack/audio:/data
+      - /volume3/ai-stack/models:/models
+    environment:
+      - WHISPER_MODEL=base
+      - WHISPER_LANG=zh
+      - WHISPER_THREADS=4
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
