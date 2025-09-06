@@ -3,11 +3,19 @@ FROM python:3.9-slim
 # 使用台灣映像源加速下載
 RUN sed -i 's/deb.debian.org/free.nchc.org.tw/' /etc/apt/sources.list
 
-# 安裝基本依賴（不包含編譯工具，使用 OpenAI API）
+# 安裝基本依賴（輕量級，無需編譯大型套件）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates ffmpeg && \
-    pip3 install --no-cache-dir fastapi "uvicorn[standard]" python-multipart openai && \
+    curl ca-certificates ffmpeg wget && \
+    pip3 install --no-cache-dir fastapi "uvicorn[standard]" python-multipart requests && \
     rm -rf /var/lib/apt/lists/*
+
+# 下載預編譯的 whisper.cpp 執行檔（針對一般 CPU）
+WORKDIR /tmp
+RUN wget -q https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.4/whisper-bin-linux.zip && \
+    unzip whisper-bin-linux.zip && \
+    chmod +x whisper-cpp-* && \
+    mv whisper-cpp-* /usr/local/bin/whisper || \
+    echo "預編譯版本下載失敗，將使用 Ollama API"
 
 WORKDIR /app
 COPY server.py /app/server.py

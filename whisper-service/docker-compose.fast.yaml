@@ -15,7 +15,10 @@ services:
       - WHISPER_MODEL=base
       - WHISPER_LANG=zh
       - WHISPER_THREADS=4
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - USE_OLLAMA=${USE_OLLAMA:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
