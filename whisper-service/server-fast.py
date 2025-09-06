@@ -26,12 +26,9 @@ def check_ollama_connection():
         return False
 
 def check_whisper_binary():
-    """檢查 whisper 執行檔是否可用"""
-    try:
-        result = subprocess.run(["whisper", "--help"], capture_output=True, timeout=5)
-        return result.returncode == 0
-    except:
-        return False
+    """檢查 whisper 執行檔是否可用（暫時停用）"""
+    # 暫時停用本地 whisper 檢查，專注於 Ollama
+    return False
 
 @app.get("/health")
 def health():
