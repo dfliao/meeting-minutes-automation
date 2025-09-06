@@ -1,7 +1,12 @@
 FROM debian:bullseye-slim
 
+# 使用台灣映像源加速下載
+RUN sed -i 's/deb.debian.org/free.nchc.org.tw/' /etc/apt/sources.list
+
 # Basic dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends     git cmake build-essential ffmpeg python3 python3-pip curl ca-certificates  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake build-essential ffmpeg python3 python3-pip curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Python packages
 RUN pip3 install --no-cache-dir fastapi "uvicorn[standard]" python-multipart
