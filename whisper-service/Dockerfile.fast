@@ -1,14 +1,11 @@
 FROM python:3.9-slim
 
-# 使用台灣映像源加速下載
-RUN echo "deb http://free.nchc.org.tw/debian bullseye main" > /etc/apt/sources.list && \
-    echo "deb http://free.nchc.org.tw/debian-security bullseye-security main" >> /etc/apt/sources.list && \
-    echo "deb http://free.nchc.org.tw/debian bullseye-updates main" >> /etc/apt/sources.list
+# 使用官方映像源（穩定可靠）
 
-# 安裝基本依賴（輕量級，無需編譯大型套件）
+# 安裝基本依賴和 whisper
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates ffmpeg wget unzip && \
-    pip3 install --no-cache-dir fastapi "uvicorn[standard]" python-multipart requests && \
+    pip3 install --no-cache-dir fastapi "uvicorn[standard]" python-multipart requests openai-whisper && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
