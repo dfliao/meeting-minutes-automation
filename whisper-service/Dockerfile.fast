@@ -1,7 +1,5 @@
 FROM python:3.9-slim
 
-# 使用官方映像源（穩定可靠）
-
 # 安裝基本依賴和 whisper
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates ffmpeg wget unzip && \
