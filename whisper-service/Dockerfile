@@ -1,7 +1,6 @@
 FROM debian:bullseye-slim
 
-# 使用台灣映像源加速下載
-RUN sed -i 's/deb.debian.org/free.nchc.org.tw/' /etc/apt/sources.list
+# 使用官方 Debian 軟體源
 
 # Basic dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
