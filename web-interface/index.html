@@ -373,7 +373,7 @@
             resultSection.classList.remove('show');
 
             const formData = new FormData();
-            formData.append('data', file);
+            formData.append('audio_file', file);
             if (language && language !== 'auto') {
                 formData.append('language', language);
             }
