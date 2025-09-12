@@ -268,7 +268,7 @@
                 <h3>⚙️ 轉錄設定</h3>
                 <div class="form-group">
                     <label for="serverUrl">伺服器網址:</label>
-                    <input type="url" id="serverUrl" name="serverUrl" value="http://192.168.0.222:5678/webhook/audio-transcription" required>
+                    <input type="url" id="serverUrl" name="serverUrl" value="http://192.168.0.222:10300" required>
                 </div>
                 <div class="form-group">
                     <label for="language">語言:</label>
@@ -387,7 +387,7 @@
                     progressFill.style.width = progress + '%';
                 }, 500);
 
-                const response = await fetch(serverUrl, {
+                const response = await fetch(`${serverUrl}/transcribe`, {
                     method: 'POST',
                     body: formData
                 });
