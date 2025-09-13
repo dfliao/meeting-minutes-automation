@@ -387,7 +387,8 @@
                     progressFill.style.width = progress + '%';
                 }, 500);
 
-                const response = await fetch(`${serverUrl}/transcribe`, {
+                const apiUrl = serverUrl.replace(/\/$/, '') + '/transcribe';
+                const response = await fetch(apiUrl, {
                     method: 'POST',
                     body: formData
                 });
