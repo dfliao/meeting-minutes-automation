@@ -418,37 +418,45 @@
         function handleSuccess(result) {
             showStatus('✅ 處理完成！', 'success');
             
-            // 顯示結果
+            // 顯示結果 - 適配 Whisper API 格式
             let content = '<h4>處理信息</h4>';
-            if (result.data && result.data.processingInfo) {
-                const info = result.data.processingInfo;
-                content += `<p><strong>處理方式：</strong>${info.wasSplit ? '大檔案分割處理' : '直接處理'}</p>`;
-                if (info.numberOfChunks > 1) {
-                    content += `<p><strong>分割片段：</strong>${info.numberOfChunks} 個</p>`;
-                }
-                content += `<p><strong>文字長度：</strong>${info.totalWords} 字</p>`;
+            
+            // Whisper API 格式處理
+            if (result.service_info) {
+                const info = result.service_info;
+                content += `<p><strong>處理方式：</strong>${info.compute_mode || 'local'}</p>`;
+                content += `<p><strong>模型：</strong>${info.model || 'unknown'}</p>`;
+                content += `<p><strong>伺服器：</strong>${info.host || 'localhost'}</p>`;
             }
+            
+            if (result.file_info) {
+                content += `<p><strong>檔案名稱：</strong>${result.file_info.filename}</p>`;
+                content += `<p><strong>檔案大小：</strong>${(result.file_info.size / 1024 / 1024).toFixed(2)} MB</p>`;
+            }
+            
+            if (result.word_count) {
+                content += `<p><strong>文字長度：</strong>${result.word_count} 字</p>`;
+            }
+            
+            content += `<p><strong>語言：</strong>${result.language || 'zh'}</p>`;
 
-            if (result.data && result.data.meetingMinutesPreview) {
-                content += '<h4>會議紀錄預覽</h4>';
-                content += `<div style="background: white; padding: 15px; border-radius: 5px; margin: 10px 0; white-space: pre-wrap;">${result.data.meetingMinutesPreview}</div>`;
-            }
-
-            if (result.data && result.data.originalTranscription) {
-                content += '<h4>原始轉錄預覽</h4>';
-                content += `<div style="background: white; padding: 15px; border-radius: 5px; margin: 10px 0; white-space: pre-wrap;">${result.data.originalTranscription}</div>`;
-            }
+            // 顯示轉錄結果
+            content += '<h4>轉錄結果</h4>';
+            const transcribedText = result.text || '無法取得轉錄文字';
+            content += `<div style="background: white; padding: 15px; border-radius: 5px; margin: 10px 0; white-space: pre-wrap; line-height: 1.6;">${transcribedText}</div>`;
 
             resultContent.innerHTML = content;
             resultSection.classList.add('show');
 
             // 生成下載連結（如果有檔案信息）
-            if (result.data && result.data.files) {
+            if (result.download_files) {
                 downloadLinks.innerHTML = `
                     <p style="margin-bottom: 10px;"><strong>下載檔案：</strong></p>
-                    <a href="#" class="download-btn" onclick="downloadFile('${result.data.files.original}', 'original')">📄 原始轉錄</a>
-                    <a href="#" class="download-btn" onclick="downloadFile('${result.data.files.minutes}', 'minutes')">📋 會議紀錄</a>
+                    ${result.download_files.txt_file ? `<a href="${result.download_files.txt_file}" class="download-btn" download>📄 TXT 檔案</a>` : ''}
+                    ${result.download_files.json_file ? `<a href="${result.download_files.json_file}" class="download-btn" download>📋 JSON 檔案</a>` : ''}
                 `;
+            } else {
+                downloadLinks.innerHTML = '';
             }
         }
 
